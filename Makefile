@@ -9,7 +9,7 @@ STAGE := $(BUILD_DIR)/package
 DEB := $(PACKAGE)_$(VERSION)_all.deb
 SOURCES := $(shell find src config systemd debian -type f) Makefile README.md README-dev.md
 
-.PHONY: all build test check install clean
+.PHONY: all build test test-systemd check install clean
 all: build
 build: $(DEB)
 
@@ -40,6 +40,9 @@ check:
 test: check build
 	bash tests/test-firewall.sh
 	bash tests/test-package.sh "$(DEB)"
+
+test-systemd: check build
+	bash tests/test-systemd.sh "$(DEB)"
 
 clean:
 	rm -rf "$(BUILD_DIR)"

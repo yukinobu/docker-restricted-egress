@@ -22,6 +22,17 @@ make check    # 構文・差分チェックのみ
 make clean   # build/ と生成した .deb を削除
 ```
 
+systemd-analyze が利用できる環境では、次も実行できます。ホストのサービスは操作しません。
+
+```bash
+make test-systemd
+```
+
+生成 .deb を一時領域に展開し、最小の Docker unit と target を補って
+`systemd-analyze verify` で unit/drop-in の構文と起動依存関係を確認します。
+実際のサービス起動・停止順序の検証には、後述の実機検証を使用してください。
+`SYSTEMD_ANALYZE=/path/to/systemd-analyze make test-systemd` で検証ツールを指定できます。
+
 バージョンは `debian/control` で管理します。`make install DESTDIR=/任意の作業ディレクトリ`
 はパッケージ作成用の配置を行います。ホストへの導入は README の `apt install` を使用してください。
 
@@ -140,6 +151,12 @@ Docker/iptables エラー、適用途中の失敗、停止、削除拒否、接�
 
 これらのモック検証は、カーネルによるパケット処理、実際の systemd job ordering、
 apt/dpkg の conffile 更新対話の実機検証を代替しません。
+
+初回実装では Ubuntu 26.04 の開発コンテナで `make test` のファイアウォール 22 シナリオと
+パッケージ検証 8 項目を確認しました。追加パッケージのインストールは行わず、
+systemd 259 のパッケージを一時展開して `make test-systemd` も確認しました。
+この開発環境には Docker Engine・iptables がなく、NET_ADMIN 権限および network namespace の
+作成権限もないため、Ubuntu 24.04 / WSL2 上の実通信・実際のサービス連携は未検証です。
 
 ### リリース前の実機検証
 
