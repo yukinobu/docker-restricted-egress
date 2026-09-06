@@ -4,7 +4,7 @@ Docker コンテナからインターネットへの通信を許可しつつ、L
 
 主に以下の環境を対象としています。
 
-* WSL2 上の Ubuntu
+* WSL2 上の Ubuntu（Ubuntu 24.04 LTS を開発・対応の基準とします）
 * Ubuntu 内に `apt install docker-ce` で直接インストールした Docker Engine
 * systemd が有効
 * Docker が iptables firewall backend を使用
