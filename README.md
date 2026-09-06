@@ -54,7 +54,7 @@ Docker Desktop の WSL integration を利用する構成は対象外です。
                                  Internet
 ```
 
-Docker が管理する `DOCKER-*` chain は直接変更せず、Docker がユーザー定義ルール向けに提供する `DOCKER-USER` chain から専用 chain へ分岐させます。
+Docker が管理する `DOCKER-USER` chain は直接変更せず、Docker がユーザー定義ルール向けに提供する `DOCKER-USER` chain から専用の `DOCKER-RESTRICTED-EGRESS` chain へ分岐させます。
 
 ## インストール
 
@@ -98,7 +98,7 @@ systemctl status docker-restricted-egress.service
 
 ## Docker Compose から利用する
 
-`restricted-net` はパッケージ側で管理されるため、Compose では external network として参照します。
+`restricted-net` は docker-restricted-egress 側で管理されるため、Compose では external network として参照します。
 
 ```yaml
 services:
@@ -400,7 +400,7 @@ example.com は名前解決できない
 
 ## IPv6
 
-初期バージョンでは IPv4 の制御を対象とします。
+本バージョンでは IPv4 の制御を対象とします。
 
 IPv6 が有効な環境では、IPv4 の RFC1918 相当だけを拒否しても LAN への IPv6 通信を防止できません。
 
@@ -441,12 +441,12 @@ iptables v1.8.x (nf_tables)
 
 ## 対象外
 
-以下の環境は初期バージョンでは対象外です。
+以下の環境は本バージョンでは対象外です。
 
 * Docker Desktop for Windows の WSL integration
 * Docker の nftables firewall backend
 * rootless Docker
-* IPv6 の完全な egress 制御
+* IPv6 の egress 制御
 * Kubernetes / CNI network
 * Docker Swarm overlay network
 
@@ -476,5 +476,3 @@ dpkg -L docker-restricted-egress
 ```
 
 から管理対象を確認できます。
-
-個別の `install.sh` / `uninstall.sh` でシステムファイルを管理するのではなく、インストール、アップグレード、削除、設定ファイル管理を `dpkg` / `apt` の lifecycle に統合します。
