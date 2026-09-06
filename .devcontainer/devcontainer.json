@@ -1,0 +1,78 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
+{
+  "name": "Ubuntu",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "runArgs": [
+    "--name",
+    "devcontainer-${localWorkspaceFolderBasename}",
+    "--add-host",
+    "host.docker.internal:host-gateway"
+  ],
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "nodeGypDependencies": true,
+      "installYarnUsingApt": true,
+      "version": "lts",
+      "pnpmVersion": "latest",
+      "nvmVersion": "latest"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "installTools": true,
+      "toolsToInstall": "flake8,autopep8,black,yapf,mypy,pydocstyle,pycodestyle,bandit,pipenv,virtualenv,pytest,pylint",
+      "version": "3.14"
+    },
+    "ghcr.io/guiyomh/features/vim:0": {},
+    "ghcr.io/christophermacgown/devcontainer-features/direnv:1": {},
+    "ghcr.io/jsburckhardt/devcontainer-features/codex:1": {},
+    "ghcr.io/devcontainer-community/devcontainer-features/ripgrep:1": {}
+  },
+  "onCreateCommand": "/bin/bash .devcontainer/onCreateCommand.sh",
+  "updateContentCommand": "/bin/bash .devcontainer/updateContentCommand.sh",
+  "postCreateCommand": "/bin/bash .devcontainer/postCreateCommand.sh",
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "DavidAnson.vscode-markdownlint",
+        "EditorConfig.EditorConfig",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-python.black-formatter",
+        "ms-python.debugpy",
+        "ms-python.flake8",
+        "ms-python.isort",
+        "ms-python.mypy-type-checker",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-vscode.makefile-tools",
+        "oderwat.indent-rainbow",
+        "openai.chatgpt",
+        "redhat.vscode-yaml",
+        "timonwong.shellcheck"
+        // "amazonwebservices.aws-toolkit-vscode",
+        // "aws-scripting-guy.cform",
+        // "boto3typed.boto3-ide",
+        // "dbaeumer.vscode-eslint",
+        // "docker.docker",
+        // "hashicorp.terraform",
+        // "kddejong.vscode-cfn-lint",
+        // "marp-team.marp-vscode",
+        // "ms-vscode.PowerShell",
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/python/current/bin/python"
+      }
+    }
+  }
+
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "root"
+}
