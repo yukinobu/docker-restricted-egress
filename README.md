@@ -65,7 +65,7 @@ docker-restricted-egress の制限ルールは、Docker がユーザー定義ル
 ビルド済み Debian package がある場合は、次のようにインストールします。
 
 ```bash
-sudo apt install ./docker-restricted-egress_1.0.0_all.deb
+sudo apt install ./docker-restricted-egress_0.0.1_all.deb
 ```
 
 インストール後、主なリソースとして次のファイルが配置されます。
@@ -193,7 +193,7 @@ sudo systemctl reload docker-restricted-egress.service
 1. 対象ネットワークを利用するすべてのコンテナを停止・削除します。Compose を利用している場合は、該当する各 project で `docker compose down` を実行します。
 2. 設定ファイルを変更前の値に保ったまま `sudo apt remove docker-restricted-egress` を実行し、既存ネットワークと保護ルールの削除が成功したことを確認します。
 3. 削除後も残る `/etc/default/docker-restricted-egress` を編集します。新しい subnet は LAN、VPN、他の Docker network と重ならない範囲にします。
-4. `sudo apt install ./docker-restricted-egress_1.0.0_all.deb` で再インストールし、変更した設定でネットワークと制限ルールを作成します。
+4. `sudo apt install ./docker-restricted-egress_0.0.1_all.deb` で再インストールし、変更した設定でネットワークと制限ルールを作成します。
 5. サービスの正常動作を確認してからコンテナを再作成し、インターネットへの接続と LAN への通信拒否を確認します。`NETWORK` を変更した場合は、Compose の external network 名や `docker run --network` の指定も変更します。
 
 削除に失敗した場合は設定の編集や再インストールに進まず、原因を解消してください。先に設定を書き換えてしまった場合は変更前の値に戻してから削除します。元の構成で利用を再開する場合は、設定を戻した上でサービスを `restart` してください。
