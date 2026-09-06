@@ -29,29 +29,29 @@ Docker Desktop の WSL integration を利用する構成は対象外です。
 構成イメージ:
 
 ```text
-                    WSL2 / Ubuntu
-                         │
-                  Docker Engine
-                         │
-                  restricted-net
-                  172.30.0.0/24
-                         │
-               br-restricted
-                         │
-                         ▼
-                    DOCKER-USER
-                         │
-                         ▼
-              DOCKER-RESTRICTED-EGRESS
-                  │       │
-                  │       └─ RFC1918 → REJECT
-                  │
-                  └─ その他 → Docker 標準処理
-                                     │
-                                  NAT
-                                     │
-                                     ▼
-                                 Internet
+                         WSL2 / Ubuntu
+                               │
+                         Docker Engine
+                               │
+                         restricted-net
+                         172.30.0.0/24
+                               │
+                         br-restricted
+                               │
+                               ▼
+                          DOCKER-USER
+                               │
+                               ▼
+                  DOCKER-RESTRICTED-EGRESS
+                               │
+                   ┌───────────┴───────────┐
+                   │                       │
+             RFC1918 → REJECT      その他 → Docker 標準処理
+                                           │
+                                          NAT
+                                           │
+                                           ▼
+                                        Internet
 ```
 
 Docker が管理する `DOCKER-USER` chain は直接変更せず、Docker がユーザー定義ルール向けに提供する `DOCKER-USER` chain から専用の `DOCKER-RESTRICTED-EGRESS` chain へ分岐させます。
