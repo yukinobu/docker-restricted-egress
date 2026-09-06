@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+case ${1:-} in
+    configure)
+        [[ -d /run/systemd/system ]] || {
+            echo 'docker-restricted-egress requires a running systemd and local Docker Engine.' >&2
+            exit 1
+        }
+        /usr/libexec/docker-restricted-egress/firewall prepare
+        systemctl daemon-reload
+        systemctl start docker.service
+        systemctl restart docker-restricted-egress.service
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        # A failed package operation must not silently reopen egress.
+        systemctl daemon-reload
+        ;;
+esac

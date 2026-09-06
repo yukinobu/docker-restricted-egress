@@ -1,0 +1,7 @@
+# Root-managed Bash configuration. Only BLOCK_CIDRS can be changed with reload.
+# For network/bridge/subnet/chain changes, follow the migration steps in README.md.
+NETWORK=restricted-net
+BRIDGE=br-restricted
+SUBNET=172.30.0.0/24
+CHAIN=DOCKER-RESTRICTED-EGRESS
+BLOCK_CIDRS="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
