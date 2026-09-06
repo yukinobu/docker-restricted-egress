@@ -1,0 +1,11 @@
+Package: docker-restricted-egress
+Version: 0.0.1
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: docker-restricted-egress contributors <root@localhost>
+Depends: bash (>= 5.0), iptables, systemd, util-linux, coreutils, docker-ce | docker.io
+Description: Restrict IPv4 egress from a managed Docker bridge
+ Provides a Docker bridge network with private-network egress rejection,
+ fail-closed startup and reload, and systemd lifecycle integration.
+ Intended for a local rootful Docker Engine using its iptables backend.

@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+printf 'docker %s\n' "$*" >> "$MOCK_ROOT/log"
+[[ $1 == --host && $2 == unix:///var/run/docker.sock ]]; shift 2
+[[ ! ${DOCKER_HOST+x} && ! ${DOCKER_CONTEXT+x} && ! ${DOCKER_API_VERSION+x} ]]
+[[ ! -f $MOCK_ROOT/daemon-down ]] || exit 1
+if [[ -f $MOCK_ROOT/fail && "docker $*" == *"$(< "$MOCK_ROOT/fail")"* ]]; then exit 1; fi
+[[ $1 == network ]]; shift
+case $1 in
+    ls) if [[ -f $MOCK_ROOT/network ]]; then echo restricted-net; fi ;;
+    inspect) [[ -f $MOCK_ROOT/network ]]; cat "$MOCK_ROOT/network" ;;
+    create)
+        [[ ! -f $MOCK_ROOT/network ]]
+        # An independent assertion at the moment a network becomes usable.
+        [[ $(< "$MOCK_ROOT/mangle/FORWARD") == *'-i br-restricted -m comment --comment docker-restricted-egress:guard -j DROP'* ]]
+        printf '%064d|bridge|local|false|false|br-restricted|172.30.0.0/24,|0|true|true||false|false|default\n' 1 > "$MOCK_ROOT/network"
+        printf '%064d\n' 1 ;;
+    rm)
+        [[ ! -f $MOCK_ROOT/race-attach ]] || exit 1
+        [[ -f $MOCK_ROOT/network ]]
+        [[ $(< "$MOCK_ROOT/network") == *'|0|true|'* ]]
+        [[ $(< "$MOCK_ROOT/mangle/FORWARD") == *'docker-restricted-egress:guard'* ]]
+        rm "$MOCK_ROOT/network"
+        if [[ -f $MOCK_ROOT/race-recreate ]]; then
+            printf '%064d|bridge|local|false|false|br-restricted|172.30.0.0/24,|0|true|true||false|false|default\n' 2 > "$MOCK_ROOT/network"
+        fi ;;
+    *) exit 2 ;;
+esac

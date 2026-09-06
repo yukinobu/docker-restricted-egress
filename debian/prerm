@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+case ${1:-} in
+    remove|deconfigure)
+        /usr/libexec/docker-restricted-egress/firewall check-unused
+        systemctl stop docker-restricted-egress.service
+        /usr/libexec/docker-restricted-egress/firewall uninstall
+        ;;
+    upgrade|failed-upgrade)
+        /usr/libexec/docker-restricted-egress/firewall guard
+        ;;
+esac

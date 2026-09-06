@@ -1,0 +1,56 @@
+#!/bin/bash
+set -euo pipefail
+[[ $1 == --wait && $2 == 10 ]]; shift 2
+printf 'iptables %s\n' "$*" >> "$MOCK_ROOT/log"
+if [[ -f $MOCK_ROOT/fail && "iptables $*" == *"$(< "$MOCK_ROOT/fail")"* ]]; then exit 4; fi
+[[ $1 == -t ]]; table=$2; shift 2
+op=$1; shift
+chain=${1:-}; [[ $# == 0 ]] || shift
+dir=$MOCK_ROOT/$table
+file=$dir/$chain
+mkdir -p "$dir"
+case $op in
+    -S)
+        if [[ -n $chain ]]; then
+            [[ -f $file ]] || exit 1
+            if [[ $chain == FORWARD ]]; then printf -- '-P %s ACCEPT\n' "$chain"; else printf -- '-N %s\n' "$chain"; fi
+            cat "$file"
+        else
+            for file in "$dir"/*; do
+                [[ -f $file ]] || continue
+                chain=${file##*/}
+                if [[ $chain == FORWARD ]]; then printf -- '-P %s ACCEPT\n' "$chain"; else printf -- '-N %s\n' "$chain"; fi
+                cat "$file"
+            done
+        fi ;;
+    -N) [[ ! -e $file ]]; : > "$file" ;;
+    -F) [[ -f $file ]]; : > "$file" ;;
+    -X)
+        [[ -f $file && ! -s $file ]]
+        for other in "$dir"/*; do
+            while IFS= read -r line; do [[ $line != *"-j $chain" ]] || exit 1; done < "$other"
+        done
+        rm "$file" ;;
+    -A|-I|-C|-D)
+        [[ -f $file ]] || exit 1
+        if [[ $op == -I ]]; then [[ $1 == 1 ]]; shift; fi
+        rule="-A $chain $*"
+        mapfile -t lines < "$file"
+        index=-1
+        for i in "${!lines[@]}"; do
+            if [[ ${lines[i]} == "$rule" ]]; then index=$i; break; fi
+        done
+        case $op in
+            -C) (( index >= 0 )) ;;
+            -D)
+                (( index >= 0 ))
+                unset 'lines[index]'
+                : > "$file"
+                for line in "${lines[@]}"; do printf '%s\n' "$line" >> "$file"; done ;;
+            -A) printf '%s\n' "$rule" >> "$file" ;;
+            -I)
+                printf '%s\n' "$rule" > "$file"
+                for line in "${lines[@]}"; do printf '%s\n' "$line" >> "$file"; done ;;
+        esac ;;
+    *) echo "Unsupported mock iptables operation: $op" >&2; exit 2 ;;
+esac

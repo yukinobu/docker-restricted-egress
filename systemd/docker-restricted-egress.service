@@ -1,0 +1,15 @@
+[Unit]
+Description=Restricted IPv4 egress for Docker bridge network
+BindsTo=docker.service
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/docker-restricted-egress/firewall apply
+ExecReload=/usr/libexec/docker-restricted-egress/firewall apply
+ExecStop=/usr/libexec/docker-restricted-egress/firewall stop
+TimeoutStartSec=180
+TimeoutStopSec=180
+UMask=0077

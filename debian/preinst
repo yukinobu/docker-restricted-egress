@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+case ${1:-} in
+    upgrade|install)
+        # On upgrade (also reinstall from config-files), block before unpacking.
+        if [[ -x /usr/libexec/docker-restricted-egress/firewall ]]; then
+            /usr/libexec/docker-restricted-egress/firewall guard
+        fi
+        ;;
+esac

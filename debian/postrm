@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+case ${1:-} in
+    remove|purge)
+        if [[ -d /run/systemd/system ]]; then systemctl daemon-reload; fi
+        # Runtime state is removed only after the prerm safety checks succeeded.
+        if [[ -f /var/lib/docker-restricted-egress/removed ]]; then
+            rm -rf /var/lib/docker-restricted-egress
+        fi
+        ;;
+esac
