@@ -7,7 +7,9 @@
     "--name",
     "devcontainer-${localWorkspaceFolderBasename}",
     "--add-host",
-    "host.docker.internal:host-gateway"
+    "host.docker.internal:host-gateway",
+    "--network",
+    "restricted-net"
   ],
   "build": {
     "dockerfile": "Dockerfile"
