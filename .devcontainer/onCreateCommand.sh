@@ -1,4 +1,6 @@
-#!/usr/bin/env -S bash -euET -o pipefail -O inherit_errexit
+#!/usr/bin/env bash
+set -euET -o pipefail
+shopt -s inherit_errexit
 
 catch() {
 	echo "[ERROR] returned a non-zero exit status $? on $0:$1" "$(\date +'[%F %T %Z]')" >&2
@@ -12,8 +14,10 @@ ln -fs ~/local/dotfiles/_bashrc_safe ~/.bashrc_safe
 ln -fs ~/local/dotfiles/_gitignore ~/.gitignore
 ln -fs ~/local/dotfiles/_vimrc ~/.vimrc
 
+# install Codex CLI
+curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+
 # make devenv as needed
 [[ -f Makefile ]] && ( make -f Makefile -q devenv >/dev/null 2>&1; [[ $? -ne 2 ]] && make -f Makefile devenv ) || true
 
-# shellcheck disable=SC2154
-[[ -f ${containerWorkspaceFolder}.envrc ]] && direnv allow "${containerWorkspaceFolder}" || true
+[[ -f .envrc ]] && direnv allow . || true

@@ -35,6 +35,7 @@
   "onCreateCommand": "/bin/bash .devcontainer/onCreateCommand.sh",
   "updateContentCommand": "/bin/bash .devcontainer/updateContentCommand.sh",
   "postCreateCommand": "/bin/bash .devcontainer/postCreateCommand.sh",
+  "postAttachCommand": "/bin/bash .devcontainer/postAttachCommand.sh",
 
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   // "forwardPorts": [],
