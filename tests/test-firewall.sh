@@ -88,6 +88,135 @@ ok apply; open_guard
 [[ $(wc -l < "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS") == 1 ]]
 pass 'explicit empty block list returns to Docker processing'
 
+fresh
+cat >> "$DRE_CONFIG_FILE" <<'EOF'
+BLOCK_CIDRS_EXCEPTIONS="
+192.168.1.53/32:udp:53 192.168.1.53/32:tcp:53
+10.0.0.10/32:tcp:443
+172.20.0.0/16:tcp:8000-8080
+10.1.0.0/16:icmp
+10.2.0.0/16
+10.3.0.0/16:all
+10.4.0.0/16:tcp 10.5.0.0/16:udp
+10.6.0.0/16:udp:1 10.7.0.0/16:tcp:65535
+10.8.0.0/16:udp:1-65535
+"
+EOF
+ok apply; open_guard
+cat > "$TMP/expected-exceptions" <<'EOF'
+-A DOCKER-RESTRICTED-EGRESS -d 192.168.1.53/32 -p udp --dport 53 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 192.168.1.53/32 -p tcp --dport 53 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.0.0.10/32 -p tcp --dport 443 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 172.20.0.0/16 -p tcp --dport 8000:8080 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.1.0.0/16 -p icmp -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.2.0.0/16 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.3.0.0/16 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.4.0.0/16 -p tcp -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.5.0.0/16 -p udp -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.6.0.0/16 -p udp --dport 1 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.7.0.0/16 -p tcp --dport 65535 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.8.0.0/16 -p udp --dport 1:65535 -j RETURN
+-A DOCKER-RESTRICTED-EGRESS -d 10.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A DOCKER-RESTRICTED-EGRESS -d 172.16.0.0/12 -j REJECT --reject-with icmp-admin-prohibited
+-A DOCKER-RESTRICTED-EGRESS -d 192.168.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A DOCKER-RESTRICTED-EGRESS -j RETURN
+EOF
+cmp "$TMP/expected-exceptions" "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+cmp "$TMP/expected-jump" "$MOCK_ROOT/filter/DOCKER-USER"
+ok apply; open_guard
+cmp "$TMP/expected-exceptions" "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+pass 'exceptions precede all rejects, return to existing rules, and support protocols and port ranges idempotently'
+
+printf 'BLOCK_CIDRS_EXCEPTIONS="10.0.0.11/32:tcp:8443"\n' >> "$DRE_CONFIG_FILE"
+ok apply; open_guard
+[[ $(wc -l < "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS") == 5 ]]
+[[ $(head -n 1 "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS") == '-A DOCKER-RESTRICTED-EGRESS -d 10.0.0.11/32 -p tcp --dport 8443 -j RETURN' ]]
+printf 'BLOCK_CIDRS_EXCEPTIONS=""\n' >> "$DRE_CONFIG_FILE"
+ok apply; open_guard
+cmp "$TMP/expected-policy" "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+printf 'BLOCK_CIDRS_EXCEPTIONS="10.0.0.11/32:tcp:8443"\n' >> "$DRE_CONFIG_FILE"
+ok apply
+sed '/^BLOCK_CIDRS_EXCEPTIONS=/d' "$ROOT/config/docker-restricted-egress" > "$DRE_CONFIG_FILE"
+ok apply; open_guard
+cmp "$TMP/expected-policy" "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+pass 'reload replaces and removes exceptions; older configs default to no exceptions'
+
+fresh; ok apply
+cp "$DRE_CONFIG_FILE" "$TMP/base-config"
+cp "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS" "$TMP/old-policy"
+for entry in 'oops' '*' 'example.com/32:tcp:443' '10.0.0.1/8' '999.0.0.0/8' '010.0.0.0/8' '::/0' \
+    '10.0.0.1' '10.0.0.1/33' '10.0.0.1/32:' '10.0.0.1/32::53' '10.0.0.1/32:53' \
+    '10.0.0.1/32:TCP:443' '10.0.0.1/32:sctp:443' '10.0.0.1/32:tcp:' \
+    '10.0.0.1/32:tcp:443:' '10.0.0.1/32:tcp:80:443' '10.0.0.1/32:tcp:80,443' \
+    '10.0.0.1/32:icmp:53' '10.0.0.1/32:all:53' '10.0.0.1/32:tcp:https' \
+    '10.0.0.1/32:tcp:0' '10.0.0.1/32:udp:65536' '10.0.0.1/32:tcp:053' \
+    '10.0.0.1/32:tcp:99999999999999999999' '10.0.0.1/32:udp:54-53' \
+    '10.0.0.1/32:tcp:0-53' '10.0.0.1/32:udp:53-65536' '10.0.0.1/32:tcp:1-053' \
+    '10.0.0.1/32:tcp:-53' '10.0.0.1/32:tcp:53-' '10.0.0.1/32:tcp:1-2-3' \
+    '8.8.8.8/32:udp:53' '10.0.0.0/7' '172.0.0.0/8' '0.0.0.0/0'; do
+    cp "$TMP/base-config" "$DRE_CONFIG_FILE"
+    # A valid entry before an invalid one must not be applied either.
+    printf 'BLOCK_CIDRS_EXCEPTIONS="10.0.0.10/32:tcp:443 %s"\n' "$entry" >> "$DRE_CONFIG_FILE"
+    bad apply; guarded
+    contains "$TMP/output" BLOCK_CIDRS_EXCEPTIONS
+    cmp "$TMP/old-policy" "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+done
+pass 'malformed and out-of-block exceptions fail closed before replacing any policy rules'
+
+cp "$TMP/base-config" "$DRE_CONFIG_FILE"
+printf 'BLOCK_CIDRS_EXCEPTIONS="10.0.0.10/32:tcp:443"\n' >> "$DRE_CONFIG_FILE"
+ok apply; open_guard
+cp "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS" "$TMP/old-policy"
+printf 'BLOCK_CIDRS=""\n' >> "$DRE_CONFIG_FILE"
+bad apply; guarded
+cmp "$TMP/old-policy" "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+printf 'BLOCK_CIDRS_EXCEPTIONS=" \t\n "\n' >> "$DRE_CONFIG_FILE"
+ok apply; open_guard
+[[ $(< "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS") == '-A DOCKER-RESTRICTED-EGRESS -j RETURN' ]]
+pass 'removing blocks requires removing their exceptions; whitespace-only lists are empty'
+
+fresh
+printf 'BLOCK_CIDRS_EXCEPTIONS="8.8.8.8/32:udp:53"\n' >> "$DRE_CONFIG_FILE"
+bad apply; guarded
+absent "$MOCK_ROOT/network"
+absent "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+pass 'invalid exceptions on first apply cannot create a network or policy'
+
+fresh
+for pair in '0.0.0.0/0 255.255.255.255/32' '0.0.0.0/0 0.0.0.0/0' \
+    '192.168.1.53/32 192.168.1.53/32' '172.16.0.0/12 172.31.255.255/32' \
+    '192.168.1.128/25 192.168.1.255/32'; do
+    read -r block exception <<< "$pair"
+    cp "$ROOT/config/docker-restricted-egress" "$DRE_CONFIG_FILE"
+    printf 'BLOCK_CIDRS="%s"\nBLOCK_CIDRS_EXCEPTIONS="%s"\n' "$block" "$exception" >> "$DRE_CONFIG_FILE"
+    ok apply; open_guard
+    contains "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS" "-d $exception -j RETURN"
+done
+for pair in '192.168.1.53/32 192.168.1.52/32' '172.16.0.0/12 172.32.0.0/32' \
+    '192.168.1.128/25 192.168.1.127/32'; do
+    read -r block exception <<< "$pair"
+    cp "$ROOT/config/docker-restricted-egress" "$DRE_CONFIG_FILE"
+    printf 'BLOCK_CIDRS="%s"\nBLOCK_CIDRS_EXCEPTIONS="%s"\n' "$block" "$exception" >> "$DRE_CONFIG_FILE"
+    bad apply; guarded
+done
+pass 'exception containment handles /0, /32, non-octet masks, and adjacent addresses'
+
+fresh
+printf 'BLOCK_CIDRS_EXCEPTIONS="10.0.0.10/32:tcp:443"\n' >> "$DRE_CONFIG_FILE"
+ok apply
+for failure in '-t filter -A DOCKER-RESTRICTED-EGRESS -d 10.0.0.10/32' \
+    '-t filter -C DOCKER-RESTRICTED-EGRESS -d 10.0.0.10/32'; do
+    printf '%s\n' "$failure" > "$MOCK_ROOT/fail"
+    bad apply; guarded
+    rm "$MOCK_ROOT/fail"
+    ok apply; open_guard
+done
+ok stop; guarded
+absent "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS"
+ok apply; open_guard
+contains "$MOCK_ROOT/filter/DOCKER-RESTRICTED-EGRESS" '-d 10.0.0.10/32 -p tcp --dport 443 -j RETURN'
+pass 'exception insertion and verification failures retain protection; recovery and restart restore exceptions'
+
 fresh; ok apply
 rm -rf "$MOCK_ROOT/mangle" "$MOCK_ROOT/filter"
 mkdir -p "$MOCK_ROOT/mangle" "$MOCK_ROOT/filter"

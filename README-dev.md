@@ -62,10 +62,12 @@ ACCEPT や DOCKER-USER への分岐を挿入しても遮断が残ります。
 INPUT と IPv6 にはルールを追加しません。
 
 通常ルールは filter/DOCKER-USER の先頭から専用 chain へ分岐します。
-条件は `-i "$BRIDGE" ! -o "$BRIDGE"` です。同一 bridge 内は分岐の対象外で、
-Docker の通常処理に進みます。BLOCK_CIDRS は REJECT（icmp-admin-prohibited）、
-その他は RETURN です。ESTABLISHED を先に許可する例外を作らないため、
-reload で禁止した宛先への既存接続も拒否対象になります。
+条件は `-i "$BRIDGE" ! -o "$BRIDGE"` です。
+同一 bridge 内は分岐の対象外で、Docker の通常処理に進みます。
+専用 chain では `BLOCK_CIDRS_EXCEPTIONS` の RETURN、`BLOCK_CIDRS` の REJECT（icmp-admin-prohibited）、末尾の RETURN の順に処理します。
+例外には宛先 CIDR と、指定されたプロトコルおよび宛先ポートの条件を付けます。
+RETURN は呼び出し元の後続ルールへ処理を戻すため、既存の DOCKER-USER ルールや Docker の制限も適用されます。
+ESTABLISHED を先に許可するルールを作らないため、reload でブロック対象を追加した場合や例外を削除した場合は、既存接続も拒否対象になります。
 
 既存ルールは順序を維持し、パッケージの分岐をその前に挿入します。
 専用 chain だけを再構築し、テーブル全体や DOCKER-USER を flush しません。
@@ -101,6 +103,14 @@ Docker CLI はローカル socket を明示し、Docker context・リモート�
 正規化済み IPv4 CIDR（例: `10.0.0.0/8`）を指定します。
 空の `BLOCK_CIDRS=""` は明示的に拒否対象なしとし、未指定なら既定値を使います。
 interface 名の `+` ワイルドカードや Docker 管理 chain の指定は拒否します。
+
+`BLOCK_CIDRS_EXCEPTIONS` は `CIDR[:protocol[:port[-port]]]` を空白、タブ、改行で区切り、未指定または空文字列なら例外なしとします。
+CIDR は正規化済みの IPv4 表記に限定し、ブロック対象の少なくとも一つに全体が含まれることを確認します。
+プロトコルは `tcp`、`udp`、`icmp`、`all` に限定し、省略時は全プロトコルが対象です。
+ポートは TCP/UDP の宛先ポートに限り、先頭にゼロのない `1`〜`65535` の整数または昇順の範囲を受け付けます。
+範囲の `-` は iptables に渡す際に `:` に変換します。
+全項目の検証はネットワーク作成や専用 chain の再構築より前に行い、不正な設定では既存のポリシーを置き換えず、一時遮断を保持します。
+例外ルールも拒否ルールと同様に `iptables -C` で存在を確認してから一時遮断を解除します。
 
 既存ネットワークについて bridge driver、local scope、IPv6 無効、非 internal、
 単一の IPv4 subnet、default IPAM、ICC・masquerade 有効、IPv4 NAT mode を確認します。
@@ -146,6 +156,7 @@ postrm は unit を再読み込みしてから削除完了済みの状態だけ�
 実装本体を Bash から読み込み、コマンド境界だけを状態付きモックに置換します。
 初期化、繰り返し適用、既存ルール保持、設定破損、構成変更、所有権衝突、
 Docker/iptables エラー、適用途中の失敗、停止、削除拒否、接続競合、同時実行を確認します。
+例外についてはルールの順序、プロトコルとポート範囲、CIDR の包含境界、追加と削除、旧設定との互換性、不正設定と適用途中の失敗時の遮断維持を確認します。
 生成 .deb の展開内容と権限も確認し、展開した maintainer scripts のパスを一時領域に
 置き換えて成功・失敗時の呼び出し順を検証します。
 
@@ -181,6 +192,9 @@ Ubuntu 24.04 LTS の使い捨て WSL2/VM で、ローカルの Docker Engine と
    消え、設定だけが残ることを確認します。再インストール後に purge し、設定の削除も確認します。
 9. bridge/subnet の不一致、ネットワーク削除時の Docker 停止、適用途中のプロセス終了を再現し、
    エラー時に保護が残ることを確認します。
+10. 到達可能な LAN 内の DNS/HTTPS サーバーを `BLOCK_CIDRS_EXCEPTIONS` に登録して reload し、指定した宛先とプロトコルとポートへの通信ができ、指定外の通信は拒否されることを確認します。
+    ポート範囲の両端と範囲外、ICMP、後続の DOCKER-USER ルールによる拒否も確認します。
+    例外の削除後は既存 TCP 接続も拒否され、不正な例外の設定時とサービス停止中は一時遮断が残ることを確認します。
 
 一時遮断の確認:
 
