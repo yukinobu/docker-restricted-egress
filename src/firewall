@@ -41,6 +41,42 @@ valid_cidr() {
     (( (address & mask) == address ))
 }
 
+# Both arguments must already be validated canonical IPv4 CIDRs.
+cidr_contains() {
+    local parent=$1 child=$2 prefix=${1#*/} mask i parent_address=0 child_address=0
+    local -a parent_octets child_octets
+    (( ${child#*/} >= prefix )) || return 1
+    IFS=. read -r -a parent_octets <<< "${parent%/*}"
+    IFS=. read -r -a child_octets <<< "${child%/*}"
+    for ((i = 0; i < 4; i++)); do
+        parent_address=$(( (parent_address << 8) | parent_octets[i] ))
+        child_address=$(( (child_address << 8) | child_octets[i] ))
+    done
+    mask=$(( (0xffffffff << (32 - prefix)) & 0xffffffff ))
+    (( (child_address & mask) == parent_address ))
+}
+
+valid_port() { [[ $1 =~ ^[1-9][0-9]{0,4}$ ]] && (( 10#$1 <= 65535 )); }
+exception_rule() {
+    local entry=$1 cidr protocol ports first last
+    [[ $entry =~ ^([^:]+)(:(tcp|udp|icmp|all)(:([0-9]+(-[0-9]+)?))?)?$ ]] ||
+        die "Invalid BLOCK_CIDRS_EXCEPTIONS entry (use CIDR[:protocol[:port[-port]]]): $entry"
+    cidr=${BASH_REMATCH[1]} protocol=${BASH_REMATCH[3]} ports=${BASH_REMATCH[5]}
+    valid_cidr "$cidr" || die "Invalid BLOCK_CIDRS_EXCEPTIONS CIDR: $entry"
+    EXCEPTION_RULE=(-d "$cidr")
+    if [[ -n $protocol && $protocol != all ]]; then EXCEPTION_RULE+=(-p "$protocol"); fi
+    if [[ -n $ports ]]; then
+        [[ $protocol == tcp || $protocol == udp ]] ||
+            die "BLOCK_CIDRS_EXCEPTIONS ports require tcp or udp: $entry"
+        first=${ports%%-*} last=${ports##*-}
+        valid_port "$first" && valid_port "$last" && (( first <= last )) ||
+            die "Invalid BLOCK_CIDRS_EXCEPTIONS port (use 1-65535, ascending ranges): $entry"
+        EXCEPTION_RULE+=(--dport "${ports/-/:}")
+    fi
+    # Exempt only from our block policy; preserve subsequent DOCKER-USER/Docker rules.
+    EXCEPTION_RULE+=(-j RETURN)
+}
+
 validate_identity() {
     [[ $NETWORK =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$ ]] || die 'Invalid NETWORK'
     [[ $NETWORK != bridge && $NETWORK != host && $NETWORK != none ]] || die 'Reserved NETWORK'
@@ -114,6 +150,7 @@ prepare_guard() {
     NETWORK=restricted-net BRIDGE=br-restricted SUBNET=172.30.0.0/24
     CHAIN=DOCKER-RESTRICTED-EGRESS
     BLOCK_CIDRS='10.0.0.0/8 172.16.0.0/12 192.168.0.0/16'
+    BLOCK_CIDRS_EXCEPTIONS=''
     if [[ -f $CONFIG_FILE ]]; then
         bash -n "$CONFIG_FILE" || die "Invalid configuration syntax: $CONFIG_FILE"
         # This is a root-managed Bash configuration, like other /etc/default files.
@@ -186,8 +223,8 @@ remove_policy() {
 }
 
 apply_policy() {
-    local cidr rules line
-    local -a blocks=()
+    local cidr entry rules line contained
+    local -a blocks=() exceptions=()
     # Read all whitespace-separated entries, including multiline values, without globbing.
     while IFS= read -r line; do
         local -a words=()
@@ -195,6 +232,20 @@ apply_policy() {
         blocks+=("${words[@]}")
     done <<< "$BLOCK_CIDRS"
     for cidr in "${blocks[@]}"; do valid_cidr "$cidr" || die "Invalid BLOCK_CIDRS entry: $cidr"; done
+    while IFS= read -r line; do
+        local -a words=()
+        read -r -a words <<< "$line"
+        exceptions+=("${words[@]}")
+    done <<< "$BLOCK_CIDRS_EXCEPTIONS"
+    # Validate every exception before touching the network or replacing the policy.
+    for entry in "${exceptions[@]}"; do
+        exception_rule "$entry"
+        contained=false
+        for cidr in "${blocks[@]}"; do
+            if cidr_contains "$cidr" "${entry%%:*}"; then contained=true; break; fi
+        done
+        [[ $contained == true ]] || die "BLOCK_CIDRS_EXCEPTIONS entry must be contained in a BLOCK_CIDRS network: $entry"
+    done
     ipt -t filter -S DOCKER-USER >/dev/null || die 'DOCKER-USER is unavailable; Docker must use the iptables backend'
     # Verify Docker actually routes forwarding through DOCKER-USER before releasing the guard.
     rules=$(ipt -t filter -S FORWARD)
@@ -219,6 +270,10 @@ apply_policy() {
         : > "$STATE_DIR/chain-owned"
     fi
     ipt -t filter -F "$CHAIN"
+    for entry in "${exceptions[@]}"; do
+        exception_rule "$entry"
+        ipt -t filter -A "$CHAIN" "${EXCEPTION_RULE[@]}"
+    done
     for cidr in "${blocks[@]}"; do
         ipt -t filter -A "$CHAIN" -d "$cidr" -j REJECT --reject-with icmp-admin-prohibited
     done
@@ -228,6 +283,10 @@ apply_policy() {
         ipt -t filter -D DOCKER-USER "${JUMP[@]}"
     done
     ipt -t filter -I DOCKER-USER 1 "${JUMP[@]}"
+    for entry in "${exceptions[@]}"; do
+        exception_rule "$entry"
+        ipt -t filter -C "$CHAIN" "${EXCEPTION_RULE[@]}"
+    done
     for cidr in "${blocks[@]}"; do
         ipt -t filter -C "$CHAIN" -d "$cidr" -j REJECT --reject-with icmp-admin-prohibited
     done

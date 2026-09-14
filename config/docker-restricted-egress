@@ -1,7 +1,18 @@
-# Root-managed Bash configuration. Only BLOCK_CIDRS can be changed with reload.
+# Root-managed Bash configuration. Reload applies BLOCK_CIDRS and BLOCK_CIDRS_EXCEPTIONS.
 # For network/bridge/subnet/chain changes, follow the migration steps in README.md.
 NETWORK=restricted-net
 BRIDGE=br-restricted
 SUBNET=172.30.0.0/24
 CHAIN=DOCKER-RESTRICTED-EGRESS
 BLOCK_CIDRS="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
+BLOCK_CIDRS_EXCEPTIONS=""
+# Exceptions must be wholly inside one of the BLOCK_CIDRS networks.
+# Whitespace-separated CIDR[:protocol[:port[-port]]] entries; newlines are allowed.
+# Protocol: tcp, udp, icmp, all (or omitted). Ports: TCP/UDP only, 1-65535.
+# Omit ports to exempt all ports; use /32 for a single IPv4 address.
+# Example: allow DNS and HTTPS to selected destinations within blocked networks.
+# BLOCK_CIDRS_EXCEPTIONS="
+# 192.168.1.53/32:udp:53
+# 192.168.1.53/32:tcp:53
+# 10.0.0.10/32:tcp:443
+# "
